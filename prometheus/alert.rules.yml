@@ -1,0 +1,12 @@
+groups:
+  - name: ExtremeAPExporterAlerts
+    rules:
+      # ap_scrape_up が 0 (失敗) だったらアラート
+      - alert: TargetAPIScrapeDown
+        expr: ap_scrape_up == 0
+        for: 5m # 5分間継続して失敗していたら発火
+        labels:
+          severity: critical
+        annotations:
+          summary: "API Scrape Failed for {{ $labels.target_ip }}"
+          description: "Failed to scrape Extreme AP data from controller {{ $labels.target_ip }}. API might be down or unreachable."

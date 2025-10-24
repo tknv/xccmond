@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # 1. カスタム Exporter サービス
+  exporter:
+    build:
+      context: ./exporter
+    container_name: extreme_ap_exporter
+    restart: always
+    ports:
+      - "9100:9100"
+    volumes:
+      # targets.csv の変更をコンテナに即時反映
+      - ./exporter/targets.csv:/app/targets.csv
+    # 自己署名証明書を使用するAPIと通信するため、
+    # requests (urllib3) の警告を無効化
+    # (exporter.py内で対応済みだが、念のため環境変数も設定)
+    environment:
+      - PYTHONWARNINGS="ignore:Unverified HTTPS request"
+
+  # 2. Prometheus サービス
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle' # API経由でリロード可能にする
+
+  # 3. Grafana サービス
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      # データソースとダッシュボードのプロビジョニング
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      # デフォルトの管理者パスワードを変更
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=grafana # 起動後に変更してください
+      - GF_USERS_ALLOW_SIGN_UP=false
+
+volumes:
+  prometheus_data: {}
+  grafana_data: {}

@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 5m # デフォルトのスクレイプ間隔を5分に設定
+  scrape_timeout: 120s # タイムアウトを2分に延長 (Exporterの処理が万一遅れても待つ)
+
+rule_files:
+  - "/etc/prometheus/alert.rules.yml"
+
+scrape_configs:
+  - job_name: 'prometheus'
+    # Prometheus自身のメトリクス
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'extreme-ap-exporter'
+    # Exporterのコンテナ名 (docker-compose.ymlで定義)
+    static_configs:
+      - targets: ['exporter:9100']
