@@ -1,6 +1,4 @@
 {
-  "__inputs": [],
-  "__requires": [],
   "annotations": {
     "list": [
       {
@@ -24,11 +22,11 @@
   "liveNow": false,
   "panels": [
     {
-      "title": "API Scrape Failures",
+      "title": "XIQ-C Failures",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
-        "uid": "P123456789"
+        "uid": "prometheus-main"
       },
       "gridPos": {
         "h": 6,
@@ -62,15 +60,14 @@
               "value": 1
             }
           ]
-        },
-        "wide": false
+        }
       },
       "pluginVersion": "10.4.1",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P123456789"
+            "uid": "prometheus-main"
           },
           "expr": "ap_scrape_up == 0",
           "format": "table",
@@ -85,7 +82,7 @@
       "type": "table",
       "datasource": {
         "type": "prometheus",
-        "uid": "P123456789"
+        "uid": "prometheus-main"
       },
       "gridPos": {
         "h": 20,
@@ -95,8 +92,6 @@
       },
       "id": 2,
       "options": {
-        "align": "auto",
-        "autoMinMax": true,
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
@@ -106,14 +101,15 @@
           ],
           "show": false
         },
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": []
       },
       "pluginVersion": "10.4.1",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P123456789"
+            "uid": "prometheus-main"
           },
           "expr": "ap_info",
           "format": "table",
@@ -124,7 +120,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P123456789"
+            "uid": "prometheus-main"
           },
           "expr": "ap_status",
           "format": "table",
@@ -164,7 +160,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Value #B"
+              "options": "Value #B (last)"
             },
             "properties": [
               {
@@ -176,25 +172,46 @@
                 "value": [
                   {
                     "options": {
-                      "0": {
-                        "color": "red",
-                        "icon": "circle",
-                        "text": "Down"
-                      },
                       "1": {
                         "color": "green",
-                        "icon": "circle",
                         "text": "InService"
                       }
                     },
                     "type": "value"
+                  },
+                  {
+                    "options": {
+                      "from": 0,
+                      "result": {
+                        "color": "red",
+                        "text": "Down"
+                      },
+                      "to": 0
+                    },
+                    "type": "range"
                   }
                 ]
               },
               {
                 "id": "custom.cellOptions",
                 "value": {
-                  "type": "icon"
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
                 }
               }
             ]
@@ -243,7 +260,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Controller (IP_Address)"
+                "value": "Controller IP"
               },
               {
                 "id": "links",
@@ -280,14 +297,53 @@
                 "value": true
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "__name__"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
           }
         ]
       },
       "transformations": [
         {
-          "id": "joinByField",
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "groupBy",
           "options": {
-            "field": "serialNumber"
+            "fields": {
+              "Value #B": {
+                "aggregations": [
+                  "last"
+                ],
+                "operation": "aggregate"
+              },
+              "hostname": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "ipAddress": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "serialNumber": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "target_ip": {
+                "aggregations": [],
+                "operation": "groupby"
+              }
+            }
           }
         },
         {
@@ -295,16 +351,19 @@
           "options": {
             "excludeByName": {
               "Time": true,
-              "Value #A": true
+              "Value #A": true,
+              "__name__": true
             },
             "indexByName": {
-              "Value #B": 0,
+              "Value #B (last)": 0,
               "hostname": 1,
               "serialNumber": 2,
               "ipAddress": 3,
               "target_ip": 4
             },
-            "renameByName": {}
+            "renameByName": {
+              "Value #B (last)": "Status"
+            }
           }
         }
       ]
@@ -312,7 +371,7 @@
   ],
   "refresh": "5m",
   "schemaVersion": 39,
-  "tags": [],
+  "tags": ["extreme", "access-points"],
   "templating": {
     "list": []
   },

@@ -11,8 +11,11 @@ from flask import Flask, Response
 from prometheus_client import REGISTRY, Gauge, generate_latest
 
 # --- 設定 ---
-# ログ設定
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# ログ設定（DEBUGレベルに変更して詳細表示）
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s'
+)
 
 # Exporterがリッスンするポート
 EXPORTER_PORT = 9100
@@ -65,11 +68,11 @@ def get_token(ip, username, password):
         cache_entry = token_cache.get(ip)
 
         if cache_entry and cache_entry['expires_at'] > now:
-            logging.debug(f"Using cached token for {ip}")
+            logging.debug(f"[{ip}] Using cached token (expires at {cache_entry['expires_at']})")
             return cache_entry['token']
 
         # トークンがない、または期限切れのため再取得
-        logging.info(f"Requesting new token for {ip}...")
+        logging.info(f"[{ip}] Requesting new token...")
         token_url = f"https://{ip}:5825/management/v1/oauth2/token"
         payload = {
             'userId': username,
@@ -77,6 +80,9 @@ def get_token(ip, username, password):
             'grantType': 'password',
             'scope': '...'
         }
+        
+        logging.debug(f"[{ip}] Token request URL: {token_url}")
+        logging.debug(f"[{ip}] Token request payload: userId={username}, grantType=password")
         
         try:
             # SSL証明書の検証を無効化 (自己署名証明書対策)
@@ -86,20 +92,30 @@ def get_token(ip, username, password):
                 verify=False,
                 timeout=REQUEST_TIMEOUT
             )
+            
+            logging.debug(f"[{ip}] Token response status: {response.status_code}")
+            logging.debug(f"[{ip}] Token response headers: {dict(response.headers)}")
+            
             response.raise_for_status()
             data = response.json()
             
+            logging.debug(f"[{ip}] Token response body keys: {list(data.keys())}")
+            
             access_token = data.get('access_token')
             if not access_token:
+                logging.error(f"[{ip}] access_token not found in response: {data}")
                 raise ValueError("access_token not found in response")
 
             expires_at = now + timedelta(minutes=TOKEN_LIFETIME_MINUTES)
             token_cache[ip] = {'token': access_token, 'expires_at': expires_at}
-            logging.info(f"Successfully obtained token for {ip}")
+            logging.info(f"[{ip}] Successfully obtained token (expires at {expires_at})")
+            logging.debug(f"[{ip}] Token preview: {access_token[:20]}...")
             return access_token
 
         except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to get token for {ip}: {e}")
+            logging.error(f"[{ip}] Failed to get token: {type(e).__name__}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logging.error(f"[{ip}] Error response body: {e.response.text[:500]}")
             return None
 
 # --- データ収集 ---
@@ -111,28 +127,24 @@ def collect_metrics_for_target(target):
     username = target['username']
     password = target['password']
     
-    # 既存のメトリクスをクリア
-    # (APがリストから削除された場合に対応するため)
-    # Note: この方法だと、スクレイプ失敗時に古い情報が残る。
-    # Prometheusの思想的には、スクレイプごとにクリアするのが一般的。
-    # しかし、ここではラベルセットが動的に変わるため、
-    # 処理開始時にそのIPのメトリクスをクリアする。
-    
-    # ※ prometheus_client v0.7.0以降、ラベル指定でのremoveは非推奨
-    #   代わりに _remove メソッドを使うか、Gaugeを毎回作り直す。
-    #   ここでは簡便さのため、ラベルが一致するものをクリアするアプローチを試みる。
-    #   （ただし、prometheus_clientは「存在しない」状態を表現するのが難しい）
+    logging.info(f"[{ip}] ===== Starting metric collection =====")
     
     # ap_scrape_up をまず 0 (失敗) に設定しておく
     ap_scrape_up.labels(target_ip=ip).set(0)
 
     token = get_token(ip, username, password)
     if not token:
-        logging.warning(f"Skipping scrape for {ip} due to token failure.")
+        logging.warning(f"[{ip}] Skipping scrape due to token failure.")
         return
 
     ap_query_url = f"https://{ip}:5825/management/v1/aps/query"
-    headers = {'Authorization': f"Bearer {token}"}
+    headers = {
+        'Authorization': f"Bearer {token}",
+        'Accept': 'application/json'  # curlコマンドと同じヘッダーを追加
+    }
+
+    logging.info(f"[{ip}] Querying AP data from: {ap_query_url}")
+    logging.debug(f"[{ip}] Request headers: Authorization=Bearer {token[:20]}..., Accept=application/json")
 
     try:
         response = requests.get(
@@ -141,30 +153,48 @@ def collect_metrics_for_target(target):
             verify=False,
             timeout=REQUEST_TIMEOUT
         )
+        
+        logging.debug(f"[{ip}] AP query response status: {response.status_code}")
+        logging.debug(f"[{ip}] AP query response headers: {dict(response.headers)}")
+        
         response.raise_for_status()
-        data = response.json().get('data', [])
-        logging.info(f"Successfully scraped {len(data)} APs from {ip}")
-
-        # このターゲットの既存APメトリクスをクリア
-        # (APが削除された場合に対応するため、現在のAPリストを保持)
-        current_ap_serials = {ap.get('serialNumber') for ap in data}
         
-        # 既存のメトリクスを走査し、今回取得できなかったAPのメトリクスを削除
-        # (prometheus_clientでは .remove() が推奨される)
-        # ※この処理はメトリクスが多いと重くなる可能性がある
+        # レスポンスボディをログ出力（大きすぎる場合は切り詰め）
+        response_text = response.text
+        logging.debug(f"[{ip}] AP query response body (first 1000 chars): {response_text[:1000]}")
         
-        # シンプル化: ap_info と ap_status は常に上書き(set)し、
-        # 存在しなくなったAPはGrafana側で "N/A" (or 欠損) として扱われる。
-        # Prometheusは時系列DBなので、値が来なくなれば stale となる。
-        # GrafanaのTableで "Last" を使えば問題ない。
+        response_json = response.json()
+        
+        # レスポンスが辞書かリストかを判定
+        if isinstance(response_json, dict):
+            logging.debug(f"[{ip}] Response is a dict with keys: {list(response_json.keys())}")
+            data = response_json.get('data', [])
+        elif isinstance(response_json, list):
+            logging.debug(f"[{ip}] Response is a list directly")
+            data = response_json
+        else:
+            logging.error(f"[{ip}] Unexpected response type: {type(response_json)}")
+            data = []
+        
+        logging.info(f"[{ip}] Successfully scraped {len(data)} APs")
+        
+        if len(data) == 0:
+            logging.warning(f"[{ip}] No AP data found in response!")
+            logging.warning(f"[{ip}] Full response (first 2000 chars): {str(response_json)[:2000]}")
 
+        # APデータの処理
+        ap_count = 0
         for ap in data:
             hostname = ap.get('hostname', 'N/A')
             serial = ap.get('serialNumber', 'N/A')
             ip_addr = ap.get('ipAddress', 'N/A')
+            status_val = ap.get('status', 'Unknown')
+            
+            logging.debug(f"[{ip}] Processing AP: hostname={hostname}, serial={serial}, ip={ip_addr}, status={status_val}")
             
             if serial == 'N/A':
-                continue # シリアル番号がないデータはスキップ
+                logging.warning(f"[{ip}] Skipping AP with missing serial number: {ap}")
+                continue
 
             labels = {
                 'target_ip': ip,
@@ -177,19 +207,32 @@ def collect_metrics_for_target(target):
             ap_info.labels(**labels).set(1)
 
             # 2. APステータス (ap_status)
-            status_val = ap.get('status')
             status_metric = 1 if status_val == 'InService' else 0
             ap_status.labels(**labels).set(status_metric)
+            
+            ap_count += 1
+
+        logging.info(f"[{ip}] Successfully processed {ap_count} APs")
 
         # 3. APIスクレイプステータス (ap_scrape_up)
         ap_scrape_up.labels(target_ip=ip).set(1)
+        logging.info(f"[{ip}] ===== Metric collection completed successfully =====")
 
     except requests.exceptions.RequestException as e:
-        logging.error(f"Failed to scrape AP data from {ip}: {e}")
-        # ap_scrape_up は既に 0 に設定されている
+        logging.error(f"[{ip}] Failed to scrape AP data: {type(e).__name__}: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            logging.error(f"[{ip}] Error response status: {e.response.status_code}")
+            logging.error(f"[{ip}] Error response body: {e.response.text[:1000]}")
+        logging.info(f"[{ip}] ===== Metric collection failed =====")
+    except Exception as e:
+        logging.error(f"[{ip}] Unexpected error during scraping: {type(e).__name__}: {e}")
+        import traceback
+        logging.error(f"[{ip}] Traceback: {traceback.format_exc()}")
+        logging.info(f"[{ip}] ===== Metric collection failed =====")
 
 def load_targets_from_csv():
     """CSVファイルからターゲット情報を読み込む"""
+    logging.info(f"Loading targets from CSV: {CSV_FILE_PATH}")
     targets = []
     if not os.path.exists(CSV_FILE_PATH):
         logging.error(f"CSV file not found: {CSV_FILE_PATH}")
@@ -198,15 +241,18 @@ def load_targets_from_csv():
     try:
         with open(CSV_FILE_PATH, mode='r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
-            for row in reader:
+            for row_num, row in enumerate(reader, start=1):
                 if 'ip_address' in row and 'username' in row and 'password' in row:
                     targets.append(row)
+                    logging.debug(f"CSV row {row_num}: ip={row['ip_address']}, username={row['username']}")
                 else:
-                    logging.warning(f"Skipping invalid row in CSV: {row}")
+                    logging.warning(f"Skipping invalid row {row_num} in CSV: {row}")
         logging.info(f"Loaded {len(targets)} targets from {CSV_FILE_PATH}")
         return targets
     except Exception as e:
         logging.error(f"Failed to read CSV file {CSV_FILE_PATH}: {e}")
+        import traceback
+        logging.error(f"Traceback: {traceback.format_exc()}")
         return []
 
 def collect_all_metrics():
@@ -214,7 +260,10 @@ def collect_all_metrics():
     スケジュールされたジョブ。
     全ターゲットを並列でポーリングする。
     """
+    logging.info("========================================")
     logging.info("Starting scheduled metric collection...")
+    logging.info("========================================")
+    
     targets = load_targets_from_csv()
     if not targets:
         logging.warning("No targets loaded, skipping collection.")
@@ -224,12 +273,15 @@ def collect_all_metrics():
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         executor.map(collect_metrics_for_target, targets)
     
+    logging.info("========================================")
     logging.info("Scheduled metric collection finished.")
+    logging.info("========================================")
 
 # --- Flask ルート ---
 @app.route('/metrics')
 def metrics():
     """Prometheusがスクレイプするエンドポイント"""
+    logging.debug("Metrics endpoint accessed")
     return Response(generate_latest(REGISTRY), mimetype='text/plain')
 
 @app.route('/')
@@ -240,9 +292,9 @@ def index():
 # --- スケジューラースレッド ---
 def run_scheduler():
     """
-Obfuscation: a
     スケジュールジョブ（データ収集）を別スレッドで実行する。
     """
+    logging.info("Scheduler thread started")
     # 起動時にまず1回実行
     collect_all_metrics()
     # その後、スケジュール実行
@@ -256,6 +308,13 @@ if __name__ == '__main__':
     # requestsのSSL検証無効化に伴う警告を抑制
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
+    logging.info("=" * 60)
+    logging.info("Extreme AP Exporter Starting")
+    logging.info(f"Port: {EXPORTER_PORT}")
+    logging.info(f"Polling interval: {POLLING_INTERVAL} seconds")
+    logging.info(f"CSV file: {CSV_FILE_PATH}")
+    logging.info("=" * 60)
     
     # スケジューラーをデーモンスレッドで開始
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
