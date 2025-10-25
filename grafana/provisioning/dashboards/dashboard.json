@@ -39,15 +39,19 @@
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
-        "orientation": "auto",
+        "orientation": "vertical",
         "reduceOptions": {
           "calcs": [
-            "count"
+            "lastNotNull"
           ],
           "fields": "",
           "values": false
         },
-        "textMode": "auto",
+        "textMode": "value_and_name",
+        "text": {
+          "titleSize": 14,
+          "valueSize": 28
+        },
         "thresholds": {
           "mode": "absolute",
           "steps": [
@@ -69,11 +73,190 @@
             "type": "prometheus",
             "uid": "prometheus-main"
           },
-          "expr": "ap_scrape_up == 0",
+          "expr": "count(ap_scrape_up == 0) OR on() vector(0)",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "Failures",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-main"
+          },
+          "expr": "ap_target_total",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "Total XIQ-C",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Failed Controllers",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-main"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 18,
+        "x": 6,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "First Failure Time"
+          }
+        ]
+      },
+      "pluginVersion": "10.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-main"
+          },
+          "expr": "ap_scrape_failure_timestamp > 0",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{target_ip}}",
+          "legendFormat": "",
           "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target_ip"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Controller IP"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Go to Controller",
+                    "url": "https://${__value.raw}:5825"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "First Failure Time"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "from": 0,
+                      "result": {
+                        "text": "Never Connected"
+                      },
+                      "to": 86400
+                    },
+                    "type": "range"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "__name__"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {
+              "target_ip": 0,
+              "Value": 1
+            },
+            "renameByName": {}
+          }
         }
       ]
     },
@@ -225,6 +408,16 @@
               {
                 "id": "displayName",
                 "value": "Hostname"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View AP Details",
+                    "url": "d/ap-details-dashboard/ap-details?var-hostname=${__value.raw}&var-serial=${__data.fields.serialNumber}"
+                  }
+                ]
               }
             ]
           },
