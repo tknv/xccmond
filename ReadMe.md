@@ -42,6 +42,24 @@ E.g. 500 targets, 50 parallel workers 10 times. Thus 10 x 10 seconds could spend
 docker container stop $(docker container ls -aq) && docker container rm $(docker container ls -aq) && docker rmi -f $(docker images -aq) && docker volume rm $(docker volume ls -q) && docker network rm $(docker network ls | awk '{print $1}' | grep -v 'ID\|bridge\|host\|none')
 ```
 
+### When 404 error pulling data while docker build  
+
+Sometimes in some region docker.io has some issue.  
+
+Set mirror.  
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<'EOF'
+{
+ "registry-mirrors": ["https://mirror.gcr.io"]
+}
+EOF
+
+sudo systemctl restart docker
+```
+
+
 ### related license 
 
 [https://github.com/grafana/grafana/blob/main/LICENSE](https://github.com/grafana/grafana/blob/main/LICENSE)  
