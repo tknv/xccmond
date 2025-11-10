@@ -36,6 +36,10 @@ MAX_WORKERS = 50
 Every 300 sec, call the API. This time-out is 10 sec.  
 E.g. 500 targets, 50 parallel workers 10 times. Thus 10 x 10 seconds could spend.   
 
+### customizing logo 
+
+Customizing logo, put svg logo to `custom/logo.svg`. A file name should be `logo.svg` .
+
 ### clean up
 
 ```bash

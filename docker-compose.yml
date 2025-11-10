@@ -50,12 +50,16 @@ services:
     image: grafana/grafana:10.4.1
     container_name: grafana
     restart: always
-    ports:
-      - "3000:3000"   # コンテナ内部のGrafanaは3000。composeマッピングは3001へ（flaskは内部で grafana:3001 を参照）
+    # ports:
+      # - "3000:3000"  # Avoid direct access to Grafana
     volumes:
       # データソースとダッシュボードのプロビジョニング
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      # カスタムロゴ
+      - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_icon.svg
+      - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_logo.svg
+      - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg
     environment:
       # デフォルトの管理者パスワードを変更
       - GF_SECURITY_ADMIN_USER=admin
