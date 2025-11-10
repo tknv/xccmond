@@ -33,21 +33,37 @@ services:
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle' # API経由でリロード可能にする
 
+  flask-proxy:
+    build: ./proxy
+    container_name: flask-auth-proxy
+    ports:
+      - "8080:8080"   # Webアクセス先 → http://localhost:3000
+    environment:
+      - SECRET_KEY=supersecretkey
+      - GRAFANA_URL=http://grafana:3000
+      - PROXY_HEADER=X-WEBAUTH-USER
+    depends_on:
+      - grafana
+
   # 3. Grafana サービス
   grafana:
     image: grafana/grafana:10.4.1
     container_name: grafana
     restart: always
     ports:
-      - "3000:3000"
+      - "3000:3000"   # コンテナ内部のGrafanaは3000。composeマッピングは3001へ（flaskは内部で grafana:3001 を参照）
     volumes:
       # データソースとダッシュボードのプロビジョニング
       - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
     environment:
       # デフォルトの管理者パスワードを変更
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=grafana # 起動後に変更してください
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_PROXY_ENABLED=true
+      - GF_AUTH_PROXY_HEADER_NAME=X-WEBAUTH-USER
+      - GF_AUTH_PROXY_AUTO_SIGN_UP=true
 
 volumes:
   prometheus_data: {}
