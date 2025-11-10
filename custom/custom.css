@@ -1,3 +1,33 @@
+/* `:is()`を使用して、セレクタの特異性を最大化し、他のスタイルに上書きされないようにします。 */
+:is(button[aria-label="Menu for panel with title Failed Controllers"]) {
+    display: none !important;
+}
+
+/* Hide the view, share, inspect option does not work, this is all hide */
+/* すべてのパネルの右上メニューコンテナ全体を非表示にする */
+.panel-menu {
+    display: none !important;
+}
+
+/* Hide failed controller */
+button[aria-label="Menu for panel with title Failed Controllers"] {
+    display: none !important;
+}
+.grid-drag-cancel.show-on-hover {
+    display: none !important;
+}
+/* すべてのパネルのメニューボタン（View, Share, Inspectを開くアイコン）を非表示にする */
+.panel-menu-trigger,
+.panel-menu-container {
+    display: none !important;
+}
+
+/* または、パネルヘッダーにあるアクションボタンのグループ全体を非表示にする */
+.panel-header-actions {
+    display: none !important;
+}
+
+
 /* ホームリンクを非表示 */
 a[aria-label="Home"] {
     display: none !important;

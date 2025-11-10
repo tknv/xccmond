@@ -76,7 +76,7 @@
           "expr": "count(ap_scrape_up == 0) OR on() vector(0)",
           "format": "time_series",
           "instant": true,
-          "legendFormat": "XIQ-C Failures",
+          "legendFormat": "Failures",
           "refId": "A"
         },
         {
@@ -165,7 +165,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Failed Controller IP"
+                "value": "Controller IP"
               },
               {
                 "id": "links",

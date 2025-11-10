@@ -35,8 +35,7 @@
   "liveNow": false,
   "panels": [
     {
-      // "title": "AP Information - ${hostname}",
-      "title": "",
+      "title": "AP Information - ${hostname}",
       "type": "table",
       "datasource": {
         "type": "prometheus",
