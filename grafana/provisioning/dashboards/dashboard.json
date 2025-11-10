@@ -237,6 +237,122 @@
       ]
     },
     {
+      "title": "AP Failures (Not InService)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-main"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "vertical",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "text": {
+          "titleSize": 14,
+          "valueSize": 28
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "green",
+              "value": null
+            },
+            {
+              "color": "red",
+              "value": 1
+            }
+          ]
+        }
+      },
+      "pluginVersion": "10.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-main"
+          },
+          "expr": "count(ap_status == 0) OR on() vector(0)",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "Failed APs",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Total APs (Unique Serial)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-main"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "vertical",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "text": {
+          "titleSize": 14,
+          "valueSize": 28
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "green",
+              "value": null
+            }
+          ]
+        }
+      },
+      "pluginVersion": "10.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-main"
+          },
+          "expr": "count(count by (serialNumber) (ap_info))",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "Total APs",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "title": "AP Status List",
       "type": "table",
       "datasource": {
@@ -247,7 +363,7 @@
         "h": 20,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 12
       },
       "id": 2,
       "options": {
@@ -540,6 +656,7 @@
   ],
   "refresh": "5m",
   "schemaVersion": 39,
+  "hideControls": true,
   "tags": ["extreme", "access-points"],
   "templating": {
     "list": []

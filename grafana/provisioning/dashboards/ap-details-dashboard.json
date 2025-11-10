@@ -243,6 +243,7 @@
   ],
   "refresh": "5m",
   "schemaVersion": 39,
+  "hideControls": true,
   "tags": ["extreme", "access-points", "details"],
   "templating": {
     "list": [
