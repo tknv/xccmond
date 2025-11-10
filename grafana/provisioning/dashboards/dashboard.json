@@ -117,12 +117,7 @@
           "show": false
         },
         "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "First Failure Time"
-          }
-        ]
+        "sortBy": []
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -131,7 +126,7 @@
             "type": "prometheus",
             "uid": "prometheus-main"
           },
-          "expr": "ap_scrape_failure_timestamp > 0",
+          "expr": "ap_scrape_up == 0",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -187,37 +182,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Value"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "First Failure Time"
-              },
-              {
-                "id": "unit",
-                "value": "dateTimeFromNow"
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "from": 0,
-                      "result": {
-                        "text": "Never Connected"
-                      },
-                      "to": 86400
-                    },
-                    "type": "range"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Time"
             },
             "properties": [
@@ -238,6 +202,18 @@
                 "value": true
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
           }
         ]
       },
@@ -249,11 +225,11 @@
               "Time": true,
               "__name__": true,
               "job": true,
-              "instance": true
+              "instance": true,
+              "Value": true
             },
             "indexByName": {
-              "target_ip": 0,
-              "Value": 1
+              "target_ip": 0
             },
             "renameByName": {}
           }

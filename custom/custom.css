@@ -1,0 +1,65 @@
+/* ホームリンクを非表示 */
+a[aria-label="Home"] {
+    display: none !important;
+}
+
+/* ホームアイコンを非表示 */
+[data-testid="data-testid Nav home"] {
+    display: none !important;
+}
+
+/* Profileボタンを非表示 */
+button[aria-label="Profile"] {
+    display: none !important;
+}
+
+/* Helpボタンを非表示 */
+button[aria-label="Help"] {
+    display: none !important;
+}
+
+/* Open Menuボタンを非表示 */
+button[aria-label="Open menu"] {
+    display: none !important;
+}
+
+/* メニュートグルボタンを非表示 */
+[data-testid="data-testid NavToolbar"] button:first-child {
+    display: none !important;
+}
+
+/* ニュースフィードを非表示 */
+[class*="news-container"] {
+    display: none !important;
+}
+
+/* ニュースパネルを非表示 */
+div[class*="NewsWrapper"] {
+    display: none !important;
+}
+
+/* What's newを非表示 */
+[aria-label="What's new"] {
+    display: none !important;
+}
+
+/* Starred、Recent、Folders、Alertsなどを非表示 */
+[data-testid="search-results-section-starred"],
+[data-testid="search-results-section-recent"],
+[data-testid="search-results-section-folders"],
+[data-testid="search-results-section-alerts"],
+[data-testid="search-results-section-playlists"] {
+    display: none !important;
+}
+
+/* 検索フィルターオプションを非表示 */
+button[aria-label="Sort by"],
+button[aria-label="Filter by type"],
+button[aria-label="Filter by tag"] {
+    display: none !important;
+}
+
+/* Starred、Recent以外のタブを非表示 */
+div[role="tablist"] button:not([aria-label="Dashboards"]) {
+    display: none !important;
+}

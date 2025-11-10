@@ -60,6 +60,8 @@ services:
       - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_icon.svg
       - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_logo.svg
       - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg
+      # カスタムcss
+      - ./custom/custom.css:/usr/share/grafana/public/css/custom.css
     environment:
       # デフォルトの管理者パスワードを変更
       - GF_SECURITY_ADMIN_USER=admin
@@ -68,6 +70,7 @@ services:
       - GF_AUTH_PROXY_ENABLED=true
       - GF_AUTH_PROXY_HEADER_NAME=X-WEBAUTH-USER
       - GF_AUTH_PROXY_AUTO_SIGN_UP=true
+      - GF_NEWS_NEWS_FEED_ENABLED=false
 
 volumes:
   prometheus_data: {}

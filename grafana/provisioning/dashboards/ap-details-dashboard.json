@@ -157,6 +157,30 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "instance"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "Field"
             },
             "properties": [
@@ -181,7 +205,9 @@
             "excludeByName": {
               "Time": true,
               "Value": true,
-              "__name__": true
+              "__name__": true,
+              "instance": true,
+              "job": true
             },
             "indexByName": {},
             "renameByName": {}

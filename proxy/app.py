@@ -1,6 +1,6 @@
 from flask import Flask, request, session, redirect, url_for, render_template, Response
 import requests
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote
 import os
 
 app = Flask(__name__, template_folder="templates")
@@ -30,8 +30,13 @@ def login():
         if verify_user(username, password):
             session["username"] = username
             # ログイン前にアクセスしようとしていたURLがあればそこへ、なければデフォルトのダッシュボードへ
-            next_url = request.args.get("next") or DEFAULT_REDIRECT
-            return redirect(next_url)
+            next_url = request.args.get("next")
+            
+            # ★ 修正点: next_url が "/" の場合、DEFAULT_REDIRECT を使うようにする
+            if next_url and next_url != "/login" and next_url != "/":
+                return redirect(next_url)
+            else:
+                return redirect(DEFAULT_REDIRECT)
         else:
             return render_template("login.html", error="ユーザー名またはパスワードが違います。")
     return render_template("login.html")
@@ -56,8 +61,12 @@ def make_proxy_response(grafana_resp: requests.Response):
 def proxy(path):
     username = session.get("username")
     if not username:
-        # 現在のURLをnextパラメータとして保存
-        return redirect(url_for("login", next=request.full_path))
+        # 現在のURLをnextパラメータとして保存（ログインページ以外）
+        current_url = request.full_path.rstrip('?')
+        if current_url and current_url != '/login':
+            return redirect(url_for("login", next=quote(current_url, safe='/?&=')))
+        else:
+            return redirect(url_for("login"))
 
     upstream = urljoin(GRAFANA_URL.rstrip("/") + "/", path)
     if request.query_string:
