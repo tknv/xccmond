@@ -391,7 +391,7 @@
                   {
                     "targetBlank": false,
                     "title": "View AP Details",
-                    "url": "d/ap-details-dashboard/ap-details?var-hostname=${__value.raw}&var-serial=${__data.fields.serialNumber}"
+                    "url": "d/ap-details-dashboard/ap-details?var-hostname=${__value.raw}&var-serial=${__data.fields.serialNumber}&kiosk"
                   }
                 ]
               }

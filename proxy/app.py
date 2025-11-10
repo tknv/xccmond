@@ -1,6 +1,7 @@
 from flask import Flask, request, session, redirect, url_for, render_template, Response
 import requests
-from urllib.parse import urljoin, quote
+# (urllib.parse から parse_qsl, urlencode をインポート)
+from urllib.parse import urljoin, quote, parse_qsl, urlencode
 import os
 
 app = Flask(__name__, template_folder="templates")
@@ -32,13 +33,13 @@ def login():
             # ログイン前にアクセスしようとしていたURLがあればそこへ、なければデフォルトのダッシュボードへ
             next_url = request.args.get("next")
             
-            # ★ 修正点: next_url が "/" の場合、DEFAULT_REDIRECT を使うようにする
+            # (next_url が "/" の場合、DEFAULT_REDIRECT を使う)
             if next_url and next_url != "/login" and next_url != "/":
                 return redirect(next_url)
             else:
                 return redirect(DEFAULT_REDIRECT)
         else:
-            return render_template("login.html", error="ユーザー名またはパスワードが違います。")
+            return render_template("login.html", error="Wrong username or password.")
     return render_template("login.html")
 
 @app.route("/logout")
@@ -61,16 +62,46 @@ def make_proxy_response(grafana_resp: requests.Response):
 def proxy(path):
     username = session.get("username")
     if not username:
-        # 現在のURLをnextパラメータとして保存（ログインページ以外）
+        # (未ログイン時のリダイレクト処理)
         current_url = request.full_path.rstrip('?')
         if current_url and current_url != '/login':
             return redirect(url_for("login", next=quote(current_url, safe='/?&=')))
         else:
             return redirect(url_for("login"))
 
+    # ★ 修正点: 
+    # ログイン済みで、アクセスパスがルート("/") かつ クエリ文字列がない場合
+    # (例: http://localhost:8080/ のリクエスト)
+    # Grafanaにプロキシせず、直接DEFAULT_REDIRECTにリダイレクトする
+    if not path and not request.query_string:
+        return redirect(DEFAULT_REDIRECT)
+
+    # (ここから &kiosk 強制付与ロジック - 前回から変更なし)
     upstream = urljoin(GRAFANA_URL.rstrip("/") + "/", path)
-    if request.query_string:
-        upstream += "?" + request.query_string.decode()
+    
+    # 1. 元のクエリ文字列をデコード
+    original_query = request.query_string.decode()
+    
+    # 2. クエリを (key, value) のタプルのリストに分解
+    query_tuples = parse_qsl(original_query)
+    
+    # 3. 'kiosk' キーが既に存在するかチェック
+    kiosk_present = any(key == 'kiosk' for key, value in query_tuples)
+    
+    final_query_tuples = query_tuples
+    
+    # 4. kiosk が存在しない場合、('kiosk', '') を追加
+    if not kiosk_present:
+        # ('kiosk', '') は urlencode によって 'kiosk=' に変換されます
+        final_query_tuples.append(('kiosk', '')) 
+        
+    # 5. クエリ文字列を再構築
+    final_query_string = urlencode(final_query_tuples)
+
+    if final_query_string:
+        upstream += "?" + final_query_string
+    # (kioskロジック ここまで)
+
 
     headers = {k: v for k, v in request.headers if k.lower() not in ("host", "content-length")}
     headers[PROXY_HEADER] = username  # 認証済みユーザーをGrafanaに渡す
