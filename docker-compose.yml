@@ -50,8 +50,8 @@ services:
     image: grafana/grafana:10.4.1
     container_name: grafana
     restart: always
-    # ports:
-      # - "3000:3000"  # Avoid direct access to Grafana
+    ports:
+      - "3000:3000"  # Avoid direct access to Grafana
     volumes:
       # データソースとダッシュボードのプロビジョニング
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -60,6 +60,8 @@ services:
       - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_icon.svg
       - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_logo.svg
       - ./custom/logo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg
+      # favicon
+      - ./custom/favicon.ico:/usr/share/grafana/public/img/fav32.ico
       # カスタムcss
       - ./custom/custom.css:/usr/share/grafana/public/css/custom.css
     environment:
