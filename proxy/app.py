@@ -102,9 +102,26 @@ def proxy(path):
         upstream += "?" + final_query_string
     # (kioskロジック ここまで)
 
-
-    headers = {k: v for k, v in request.headers if k.lower() not in ("host", "content-length")}
-    headers[PROXY_HEADER] = username  # 認証済みユーザーをGrafanaに渡す
+    # ★ 重要な修正: ヘッダーの処理
+    headers = {}
+    for k, v in request.headers:
+        key_lower = k.lower()
+        # Host, Content-Length は除外しない(Hostは特に重要)
+        if key_lower not in ("content-length",):
+            headers[k] = v
+    
+    # ★ 認証済みユーザーをGrafanaに渡す
+    headers[PROXY_HEADER] = username
+    
+    # ★ プロキシ経由でアクセスされていることをGrafanaに伝える
+    # X-Forwarded-* ヘッダーを設定
+    headers['X-Forwarded-For'] = request.remote_addr
+    headers['X-Forwarded-Proto'] = request.scheme
+    headers['X-Forwarded-Host'] = request.host
+    
+    # ★ オリジナルのホスト情報を保持
+    if 'X-Real-IP' not in headers:
+        headers['X-Real-IP'] = request.remote_addr
 
     data = request.get_data() or None
     try:
