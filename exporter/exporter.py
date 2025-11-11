@@ -42,7 +42,7 @@ ap_info = Gauge(
 ap_status = Gauge(
     'ap_status',
     'AP device health status (1 = InService, 0 = Other)',
-    ['target_ip', 'hostname', 'serialNumber', 'ipAddress']
+    ['target_ip', 'hostname', 'serialNumber', 'ipAddress', 'hostSite']
 )
 # ap_scrape_up: APIサーバー（コントローラー）へのスクレイプ成功/失敗
 ap_scrape_up = Gauge(
@@ -257,7 +257,7 @@ def collect_metrics_for_target(target):
                     'floorName': safe_get_value(ap, 'floorName'),
                     'macAddress': safe_get_value(ap, 'macAddress'),
                     'softwareVersion': safe_get_value(ap, 'softwareVersion'),
-                    # sysUptimeは数値の可能性があるので、安全に文字列に変換
+                    # sysUptimeは数値の可能性があるので、安全に文字列に変換serialNumber
                     'sysUptime': str(safe_get_value(ap, 'sysUptime', 0)),
                     'hostSite': safe_get_value(ap, 'hostSite')              # API
                 }
@@ -277,7 +277,8 @@ def collect_metrics_for_target(target):
                     'target_ip': ip,
                     'hostname': ap_info_labels['hostname'],
                     'serialNumber': ap_info_labels['serialNumber'],
-                    'ipAddress': ap_info_labels['ipAddress']
+                    'ipAddress': ap_info_labels['ipAddress'],
+                    'hostSite': ap_info_labels['hostSite']
                 }
                 status_val = ap_info_labels['status']
                 status_metric = 1 if status_val == 'InService' else 0
