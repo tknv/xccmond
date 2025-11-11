@@ -266,7 +266,9 @@
             "indexByName": {
               "target_ip": 0
             },
-            "renameByName": {}
+            "renameByName": {
+              "host_name": "Host Name"
+            }
           }
         }
       ]
@@ -684,6 +686,10 @@
               "target_ip": {
                 "aggregations": [],
                 "operation": "groupby"
+              },
+              "hostSite": {
+                "aggregations": [],
+                "operation": "groupby"
               }
             }
           }
@@ -701,10 +707,12 @@
               "hostname": 1,
               "serialNumber": 2,
               "ipAddress": 3,
-              "target_ip": 4
+              "target_ip": 4,
+              "hostSite": 5.1
             },
             "renameByName": {
-              "Value #B (last)": "Status"
+              "Value #B (last)": "Status",
+              "hostSite": "Site"
             }
           }
         }
@@ -869,19 +877,18 @@
               "Time": true,
               "__name__": true,
               "instance": true,
-              "job": true
+              "job": true,
+              "Value #B": true
             },
             "indexByName": {
               "Value #A": 0,
               "target_ip": 1,
-              "host_name": 2,
-              "Value #B": 3
+              "host_name": 2
             },
             "renameByName": {
               "Value #A": "Status",
               "target_ip": "Controller IP",
-              "host_name": "Host Name",
-              "Value #B": "AP Count"
+              "host_name": "Host Name"
             }
           }
         }
