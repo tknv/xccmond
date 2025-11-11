@@ -1,4 +1,4 @@
-ip_address,username,password
-10.1.2.3,admin,datg
-192.168.100.8,admin,abc123
-192.168.2.1,admir,nono
+host_name,ip_address,username,password
+foo.com,10.1.2.3,admin,datg
+iqc.awas.lab,192.168.100.8,admin,abc123
+doo,192.168.2.1,admir,nono

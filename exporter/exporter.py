@@ -35,8 +35,8 @@ MAX_WORKERS = 50
 ap_info = Gauge(
     'ap_info',
     'Basic information about the Access Point',
-    ['target_ip', 'hostname', 'serialNumber', 'ipAddress', 'hardwareType', 'status', 
-     'floorName', 'macAddress', 'softwareVersion', 'sysUptime']
+    ['target_ip', 'host_name', 'hostname', 'serialNumber', 'ipAddress', 'hardwareType', 'status', 
+     'floorName', 'macAddress', 'softwareVersion', 'sysUptime', 'hostSite']
 )
 # ap_status: APの稼働ステータス (1=InService, 0=Other)
 ap_status = Gauge(
@@ -247,7 +247,8 @@ def collect_metrics_for_target(target):
                 # ap_infoで定義されているラベルを抽出する
                 ap_info_labels = {
                     'target_ip': ip,
-                    'hostname': safe_get_value(ap, 'hostname'),
+                    'host_name': safe_get_value(target, 'host_name', 'N/A'), # CSV
+                    'hostname': safe_get_value(ap, 'hostname'),              # API
                     'serialNumber': safe_get_value(ap, 'serialNumber'),
                     'ipAddress': safe_get_value(ap, 'ipAddress'),
                     'hardwareType': safe_get_value(ap, 'hardwareType'),
@@ -256,7 +257,8 @@ def collect_metrics_for_target(target):
                     'macAddress': safe_get_value(ap, 'macAddress'),
                     'softwareVersion': safe_get_value(ap, 'softwareVersion'),
                     # sysUptimeは数値の可能性があるので、安全に文字列に変換
-                    'sysUptime': str(safe_get_value(ap, 'sysUptime', 0)) 
+                    'sysUptime': str(safe_get_value(ap, 'sysUptime', 0)),
+                    'hostSite': safe_get_value(ap, 'hostSite')              # API
                 }
 
                 # シリアルナンバーは必須ラベルの一部なので、ない場合はスキップ
@@ -324,6 +326,7 @@ def load_targets_from_csv():
         with open(CSV_FILE_PATH, mode='r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row_num, row in enumerate(reader, start=1):
+                # host_name はオプショナルだが、主要なカラムはチェック
                 if 'ip_address' in row and 'username' in row and 'password' in row:
                     targets.append(row)
                     logging.debug(f"CSV row {row_num}: ip={row['ip_address']}, username={row['username']}")
