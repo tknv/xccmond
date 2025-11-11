@@ -48,13 +48,13 @@ ap_status = Gauge(
 ap_scrape_up = Gauge(
     'ap_scrape_up',
     'Scrape status of the target API (1 = Success, 0 = Failure)',
-    ['target_ip']
+    ['target_ip', 'host_name']
 )
 # ap_scrape_failure_timestamp: スクレイプ失敗時のタイムスタンプ（初回失敗時のみ記録）
 ap_scrape_failure_timestamp = Gauge(
     'ap_scrape_failure_timestamp',
     'Unix timestamp of the first scrape failure (cleared on success)',
-    ['target_ip']
+    ['target_ip', 'host_name']
 )
 # ap_target_total: CSVに定義されているターゲットの総数
 ap_target_total = Gauge(
@@ -135,7 +135,7 @@ def get_token(ip, username, password):
                 logging.error(f"[{ip}] Error response body: {e.response.text[:500]}")
             return None
 
-def record_scrape_failure(ip):
+def record_scrape_failure(ip, host_name):
     """スクレイプ失敗を記録（初回失敗時のタイムスタンプのみ保持）"""
     with failure_lock:
         if ip not in failure_history or not failure_history[ip]['is_failing']:
@@ -145,13 +145,13 @@ def record_scrape_failure(ip):
                 'first_failure_time': failure_time,
                 'is_failing': True
             }
-            ap_scrape_failure_timestamp.labels(target_ip=ip).set(failure_time)
+            ap_scrape_failure_timestamp.labels(target_ip=ip, host_name=host_name).set(failure_time)
             logging.warning(f"[{ip}] Recording first failure at {failure_time}")
         else:
             # 既に失敗中（タイムスタンプは更新しない）
             logging.debug(f"[{ip}] Already in failure state since {failure_history[ip]['first_failure_time']}")
 
-def record_scrape_success(ip):
+def record_scrape_success(ip, host_name):
     """スクレイプ成功を記録（失敗履歴をクリア）"""
     with failure_lock:
         if ip in failure_history and failure_history[ip]['is_failing']:
@@ -159,7 +159,7 @@ def record_scrape_success(ip):
             logging.info(f"[{ip}] Recovered from failure after {failure_duration:.0f} seconds")
             failure_history[ip]['is_failing'] = False
             # メトリクスから削除（ラベルを削除することで一覧から消える）
-            ap_scrape_failure_timestamp.remove(ip)
+            ap_scrape_failure_timestamp.remove(ip, host_name)
 
 def safe_get_value(data, key, default='N/A'):
     """
@@ -180,16 +180,17 @@ def collect_metrics_for_target(target):
     ip = target['ip_address']
     username = target['username']
     password = target['password']
+    host_name = safe_get_value(target, 'host_name', 'N/A')
     
     logging.info(f"[{ip}] ===== Starting metric collection =====")
     
     # ap_scrape_up をまず 0 (失敗) に設定しておく
-    ap_scrape_up.labels(target_ip=ip).set(0)
+    ap_scrape_up.labels(target_ip=ip, host_name=host_name).set(0)
 
     token = get_token(ip, username, password)
     if not token:
         logging.warning(f"[{ip}] Skipping scrape due to token failure.")
-        record_scrape_failure(ip)
+        record_scrape_failure(ip, host_name)
         return
 
     ap_query_url = f"https://{ip}:5825/management/v1/aps/query"
@@ -247,7 +248,7 @@ def collect_metrics_for_target(target):
                 # ap_infoで定義されているラベルを抽出する
                 ap_info_labels = {
                     'target_ip': ip,
-                    'host_name': safe_get_value(target, 'host_name', 'N/A'), # CSV
+                    'host_name': host_name,  # CSVからhost_nameを使用
                     'hostname': safe_get_value(ap, 'hostname'),              # API
                     'serialNumber': safe_get_value(ap, 'serialNumber'),
                     'ipAddress': safe_get_value(ap, 'ipAddress'),
@@ -296,8 +297,8 @@ def collect_metrics_for_target(target):
         logging.info(f"[{ip}] Successfully processed {ap_count} APs")
 
         # 3. APIスクレイプステータス (ap_scrape_up)
-        ap_scrape_up.labels(target_ip=ip).set(1)
-        record_scrape_success(ip)
+        ap_scrape_up.labels(target_ip=ip, host_name=host_name).set(1)
+        record_scrape_success(ip, host_name)
         logging.info(f"[{ip}] ===== Metric collection completed successfully =====")
 
     except requests.exceptions.RequestException as e:
@@ -305,13 +306,13 @@ def collect_metrics_for_target(target):
         if hasattr(e, 'response') and e.response is not None:
             logging.error(f"[{ip}] Error response status: {e.response.status_code}")
             logging.error(f"[{ip}] Error response body: {e.response.text[:1000]}")
-        record_scrape_failure(ip)
+        record_scrape_failure(ip, host_name)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
     except Exception as e:
         logging.error(f"[{ip}] Unexpected error during scraping: {type(e).__name__}: {e}")
         import traceback
         logging.error(f"[{ip}] Traceback: {traceback.format_exc()}")
-        record_scrape_failure(ip)
+        record_scrape_failure(ip, host_name)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
 
 def load_targets_from_csv():
