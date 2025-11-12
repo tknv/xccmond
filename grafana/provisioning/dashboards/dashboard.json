@@ -71,7 +71,7 @@
             "type": "prometheus",
             "uid": "prometheus-main"
           },
-          "expr": "count(ap_scrape_up == 0) OR on() vector(0)",
+          "expr": "count(count by (target_ip, host_name) (ap_scrape_up == 0)) OR on() vector(0)",
           "format": "time_series",
           "instant": true,
           "legendFormat": "Failures",
@@ -282,6 +282,29 @@
       },
       "transformations": [
         {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Value": {
+                "aggregations": ["last"],
+                "operation": "aggregate"
+              },
+              "target_ip": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "host_name": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "fail_reason": {
+                "aggregations": ["last"],
+                "operation": "aggregate"
+              }
+            }
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
@@ -289,17 +312,17 @@
               "__name__": true,
               "job": true,
               "instance": true,
-              "Value": true
+              "Value (last)": true
             },
             "indexByName": {
               "target_ip": 0,
               "host_name": 1,
-              "fail_reason": 2
+              "fail_reason (last)": 2
             },
             "renameByName": {
               "host_name": "Host Name",
               "target_ip": "Controller IP",
-              "fail_reason": "Fail Reason"
+              "fail_reason (last)": "Fail Reason"
             }
           }
         }

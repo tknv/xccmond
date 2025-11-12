@@ -75,6 +75,61 @@ token_lock = threading.Lock()
 failure_history = {}
 failure_lock = threading.Lock()
 
+
+def parse_error_message(response):
+    """
+    HTTPエラーレスポンスから分かりやすいエラーメッセージを抽出する
+    
+    Args:
+        response: requests.Response オブジェクト
+    
+    Returns:
+        str: 人間が読みやすいエラーメッセージ
+    """
+    status_code = response.status_code
+    
+    # よくあるHTTPステータスコードの説明
+    status_descriptions = {
+        400: "Bad Request",
+        401: "Unauthorized",
+        403: "Forbidden",
+        404: "Not Found",
+        422: "Authentication Failed",
+        500: "Internal Server Error",
+        502: "Bad Gateway",
+        503: "Service Unavailable",
+        504: "Gateway Timeout"
+    }
+    
+    try:
+        # JSON形式のエラーレスポンスを解析
+        error_data = response.json()
+        
+        # APIからのエラーメッセージを優先的に取得
+        api_error = error_data.get('errorMessage') or error_data.get('message') or error_data.get('error')
+        
+        if api_error:
+            # APIのエラーメッセージがある場合
+            if status_code == 422 and ('password' in api_error.lower() or 'credential' in api_error.lower() or 'authentication' in api_error.lower()):
+                # 認証エラーの場合は明確に表示
+                return "Authentication Failed: Invalid username or password"
+            else:
+                # その他のAPIエラーメッセージ
+                return f"HTTP {status_code}: {api_error}"
+        else:
+            # APIエラーメッセージがない場合は、ステータスコードから判断
+            return f"HTTP {status_code}: {status_descriptions.get(status_code, 'Unknown Error')}"
+            
+    except (ValueError, KeyError):
+        # JSONパースに失敗した場合は、テキストレスポンスを使用
+        response_text = response.text[:200].strip()  # 最初の200文字まで
+        
+        if response_text:
+            return f"HTTP {status_code}: {status_descriptions.get(status_code, '')} - {response_text}"
+        else:
+            return f"HTTP {status_code}: {status_descriptions.get(status_code, 'Unknown Error')}"
+
+
 def get_token(ip, username, password):
     """
     キャッシュを考慮してAPIトークンを取得する。
@@ -121,9 +176,10 @@ def get_token(ip, username, password):
             
             access_token = data.get('access_token')
             if not access_token:
-                error_msg = data.get('errorMessage', 'access_token not found in response')
+                # access_token が含まれていない場合
+                error_msg = data.get('errorMessage') or data.get('message') or 'access_token not found in response'
                 logging.error(f"[{ip}] {error_msg}: {data}")
-                return None, f"Token error: {error_msg}"
+                return None, f"Token Error: {error_msg}"
 
             expires_at = now + timedelta(minutes=TOKEN_LIFETIME_MINUTES)
             token_cache[ip] = {'token': access_token, 'expires_at': expires_at}
@@ -132,29 +188,26 @@ def get_token(ip, username, password):
             return access_token, None
 
         except requests.exceptions.HTTPError as e:
-            error_msg = f"HTTP {e.response.status_code}"
-            if e.response is not None:
-                try:
-                    error_data = e.response.json()
-                    api_error = error_data.get('errorMessage', error_data.get('message', ''))
-                    if api_error:
-                        error_msg = f"HTTP {e.response.status_code}: {api_error}"
-                except:
-                    error_msg = f"HTTP {e.response.status_code}: {e.response.text[:100]}"
+            # HTTPエラー（4xx, 5xx）の処理
+            error_msg = parse_error_message(e.response)
             logging.error(f"[{ip}] Failed to get token: {error_msg}")
             return None, error_msg
+            
         except requests.exceptions.Timeout:
-            error_msg = "Connection timeout"
+            error_msg = "Connection Timeout"
             logging.error(f"[{ip}] Failed to get token: {error_msg}")
             return None, error_msg
-        except requests.exceptions.ConnectionError:
-            error_msg = "Connection refused or network error"
+            
+        except requests.exceptions.ConnectionError as e:
+            error_msg = "Connection Refused or Network Error"
             logging.error(f"[{ip}] Failed to get token: {error_msg}")
             return None, error_msg
+            
         except requests.exceptions.RequestException as e:
-            error_msg = f"{type(e).__name__}: {str(e)[:100]}"
-            logging.error(f"[{ip}] Failed to get token: {error_msg}")
+            error_msg = f"Request Error: {type(e).__name__}"
+            logging.error(f"[{ip}] Failed to get token: {error_msg} - {str(e)[:100]}")
             return None, error_msg
+
 
 def record_scrape_failure(ip, host_name, fail_reason):
     """スクレイプ失敗を記録（初回失敗時のタイムスタンプのみ保持）"""
@@ -172,6 +225,7 @@ def record_scrape_failure(ip, host_name, fail_reason):
             # 既に失敗中（タイムスタンプは更新しない）
             logging.debug(f"[{ip}] Already in failure state since {failure_history[ip]['first_failure_time']}")
 
+
 def record_scrape_success(ip, host_name):
     """スクレイプ成功を記録（失敗履歴をクリア）"""
     with failure_lock:
@@ -181,6 +235,7 @@ def record_scrape_success(ip, host_name):
             failure_history[ip]['is_failing'] = False
             # メトリクスから削除（ラベルを削除することで一覧から消える）
             ap_scrape_failure_timestamp.remove(ip, host_name)
+
 
 def safe_get_value(data, key, default='N/A'):
     """
@@ -192,6 +247,7 @@ def safe_get_value(data, key, default='N/A'):
         logging.info(f"Field '{key}' is None, using default value: {default}")
         return default
     return value
+
 
 # --- データ収集 ---
 def collect_metrics_for_target(target):
@@ -281,7 +337,7 @@ def collect_metrics_for_target(target):
                     'floorName': safe_get_value(ap, 'floorName'),
                     'macAddress': safe_get_value(ap, 'macAddress'),
                     'softwareVersion': safe_get_value(ap, 'softwareVersion'),
-                    # sysUptimeは数値の可能性があるので、安全に文字列に変換serialNumber
+                    # sysUptimeは数値の可能性があるので、安全に文字列に変換
                     'sysUptime': str(safe_get_value(ap, 'sysUptime', 0)),
                     'hostSite': safe_get_value(ap, 'hostSite')              # API
                 }
@@ -317,8 +373,6 @@ def collect_metrics_for_target(target):
                 # その他の予期せぬエラー
                 logging.error(f"[{ip}] Unexpected error processing AP data row: {e}. AP data: {ap}")
 
-        # (この後の logging.info(f"[{ip}] Successfully processed {ap_count} APs") に続く)
-
         logging.info(f"[{ip}] Successfully processed {ap_count} APs")
 
         # 3. APIスクレイプステータス (ap_scrape_up) - 成功時はfail_reasonを空に
@@ -327,46 +381,46 @@ def collect_metrics_for_target(target):
         logging.info(f"[{ip}] ===== Metric collection completed successfully =====")
 
     except requests.exceptions.HTTPError as e:
-        fail_reason = f"HTTP {e.response.status_code}"
-        if e.response is not None:
-            try:
-                error_data = e.response.json()
-                api_error = error_data.get('errorMessage', error_data.get('message', ''))
-                if api_error:
-                    fail_reason = f"HTTP {e.response.status_code}: {api_error}"
-            except:
-                fail_reason = f"HTTP {e.response.status_code}: {e.response.text[:100]}"
+        # HTTPエラー（4xx, 5xx）の処理
+        fail_reason = parse_error_message(e.response)
         logging.error(f"[{ip}] Failed to scrape AP data: {fail_reason}")
         ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
         record_scrape_failure(ip, host_name, fail_reason)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
+        
     except requests.exceptions.Timeout:
-        fail_reason = "Connection timeout"
+        fail_reason = "Connection Timeout"
         logging.error(f"[{ip}] Failed to scrape AP data: {fail_reason}")
         ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
         record_scrape_failure(ip, host_name, fail_reason)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
+        
     except requests.exceptions.ConnectionError:
-        fail_reason = "Connection refused or network error"
+        fail_reason = "Connection Refused or Network Error"
         logging.error(f"[{ip}] Failed to scrape AP data: {fail_reason}")
         ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
         record_scrape_failure(ip, host_name, fail_reason)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
+        
     except requests.exceptions.RequestException as e:
-        logging.error(f"[{ip}] Failed to scrape AP data: {type(e).__name__}: {e}")
+        fail_reason = f"Request Error: {type(e).__name__}"
+        logging.error(f"[{ip}] Failed to scrape AP data: {fail_reason}: {str(e)[:100]}")
         if hasattr(e, 'response') and e.response is not None:
             logging.error(f"[{ip}] Error response status: {e.response.status_code}")
             logging.error(f"[{ip}] Error response body: {e.response.text[:1000]}")
-        record_scrape_failure(ip, host_name)
+        ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
+        record_scrape_failure(ip, host_name, fail_reason)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
+        
     except Exception as e:
-        fail_reason = f"Unexpected error: {type(e).__name__}: {str(e)[:100]}"
-        logging.error(f"[{ip}] {fail_reason}")
+        fail_reason = f"Unexpected Error: {type(e).__name__}"
+        logging.error(f"[{ip}] {fail_reason}: {str(e)[:100]}")
         import traceback
         logging.error(f"[{ip}] Traceback: {traceback.format_exc()}")
         ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
         record_scrape_failure(ip, host_name, fail_reason)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
+
 
 def load_targets_from_csv():
     """CSVファイルからターゲット情報を読み込む"""
@@ -393,6 +447,7 @@ def load_targets_from_csv():
         import traceback
         logging.error(f"Traceback: {traceback.format_exc()}")
         return []
+
 
 def collect_all_metrics():
     """
@@ -421,6 +476,7 @@ def collect_all_metrics():
     logging.info("Scheduled metric collection finished.")
     logging.info("========================================")
 
+
 # --- Flask ルート ---
 @app.route('/metrics')
 def metrics():
@@ -428,10 +484,12 @@ def metrics():
     logging.debug("Metrics endpoint accessed")
     return Response(generate_latest(REGISTRY), mimetype='text/plain')
 
+
 @app.route('/')
 def index():
     """ヘルスチェック用"""
     return "Extreme AP Exporter is running. Go to /metrics"
+
 
 # --- スケジューラースレッド ---
 def run_scheduler():
@@ -446,6 +504,7 @@ def run_scheduler():
     while True:
         schedule.run_pending()
         time.sleep(1)
+
 
 # --- メイン実行 ---
 if __name__ == '__main__':
