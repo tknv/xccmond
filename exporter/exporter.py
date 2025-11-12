@@ -44,11 +44,11 @@ ap_status = Gauge(
     'AP device health status (1 = InService, 0 = Other)',
     ['target_ip', 'hostname', 'serialNumber', 'ipAddress', 'hostSite']
 )
-# ap_scrape_up: APIサーバー（コントローラー）へのスクレイプ成功/失敗
+# ap_scrape_up: APIサーバー（コントローラー）へのスクレイプ成功/失敗 + 失敗理由
 ap_scrape_up = Gauge(
     'ap_scrape_up',
     'Scrape status of the target API (1 = Success, 0 = Failure)',
-    ['target_ip', 'host_name']
+    ['target_ip', 'host_name', 'fail_reason']
 )
 # ap_scrape_failure_timestamp: スクレイプ失敗時のタイムスタンプ（初回失敗時のみ記録）
 ap_scrape_failure_timestamp = Gauge(
@@ -79,6 +79,7 @@ def get_token(ip, username, password):
     """
     キャッシュを考慮してAPIトークンを取得する。
     期限切れの場合は再取得する。
+    戻り値: (token, error_message) のタプル
     """
     with token_lock:
         now = datetime.now(timezone.utc)
@@ -86,7 +87,7 @@ def get_token(ip, username, password):
 
         if cache_entry and cache_entry['expires_at'] > now:
             logging.debug(f"[{ip}] Using cached token (expires at {cache_entry['expires_at']})")
-            return cache_entry['token']
+            return cache_entry['token'], None
 
         # トークンがない、または期限切れのため再取得
         logging.info(f"[{ip}] Requesting new token...")
@@ -120,22 +121,42 @@ def get_token(ip, username, password):
             
             access_token = data.get('access_token')
             if not access_token:
-                logging.error(f"[{ip}] access_token not found in response: {data}")
-                raise ValueError("access_token not found in response")
+                error_msg = data.get('errorMessage', 'access_token not found in response')
+                logging.error(f"[{ip}] {error_msg}: {data}")
+                return None, f"Token error: {error_msg}"
 
             expires_at = now + timedelta(minutes=TOKEN_LIFETIME_MINUTES)
             token_cache[ip] = {'token': access_token, 'expires_at': expires_at}
             logging.info(f"[{ip}] Successfully obtained token (expires at {expires_at})")
             logging.debug(f"[{ip}] Token preview: {access_token[:20]}...")
-            return access_token
+            return access_token, None
 
+        except requests.exceptions.HTTPError as e:
+            error_msg = f"HTTP {e.response.status_code}"
+            if e.response is not None:
+                try:
+                    error_data = e.response.json()
+                    api_error = error_data.get('errorMessage', error_data.get('message', ''))
+                    if api_error:
+                        error_msg = f"HTTP {e.response.status_code}: {api_error}"
+                except:
+                    error_msg = f"HTTP {e.response.status_code}: {e.response.text[:100]}"
+            logging.error(f"[{ip}] Failed to get token: {error_msg}")
+            return None, error_msg
+        except requests.exceptions.Timeout:
+            error_msg = "Connection timeout"
+            logging.error(f"[{ip}] Failed to get token: {error_msg}")
+            return None, error_msg
+        except requests.exceptions.ConnectionError:
+            error_msg = "Connection refused or network error"
+            logging.error(f"[{ip}] Failed to get token: {error_msg}")
+            return None, error_msg
         except requests.exceptions.RequestException as e:
-            logging.error(f"[{ip}] Failed to get token: {type(e).__name__}: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                logging.error(f"[{ip}] Error response body: {e.response.text[:500]}")
-            return None
+            error_msg = f"{type(e).__name__}: {str(e)[:100]}"
+            logging.error(f"[{ip}] Failed to get token: {error_msg}")
+            return None, error_msg
 
-def record_scrape_failure(ip, host_name):
+def record_scrape_failure(ip, host_name, fail_reason):
     """スクレイプ失敗を記録（初回失敗時のタイムスタンプのみ保持）"""
     with failure_lock:
         if ip not in failure_history or not failure_history[ip]['is_failing']:
@@ -146,7 +167,7 @@ def record_scrape_failure(ip, host_name):
                 'is_failing': True
             }
             ap_scrape_failure_timestamp.labels(target_ip=ip, host_name=host_name).set(failure_time)
-            logging.warning(f"[{ip}] Recording first failure at {failure_time}")
+            logging.warning(f"[{ip}] Recording first failure at {failure_time}: {fail_reason}")
         else:
             # 既に失敗中（タイムスタンプは更新しない）
             logging.debug(f"[{ip}] Already in failure state since {failure_history[ip]['first_failure_time']}")
@@ -184,19 +205,22 @@ def collect_metrics_for_target(target):
     
     logging.info(f"[{ip}] ===== Starting metric collection =====")
     
-    # ap_scrape_up をまず 0 (失敗) に設定しておく
-    ap_scrape_up.labels(target_ip=ip, host_name=host_name).set(0)
+    # ap_scrape_up をまず 0 (失敗) に設定しておく（fail_reasonは空）
+    ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason='').set(0)
 
-    token = get_token(ip, username, password)
+    token, token_error = get_token(ip, username, password)
     if not token:
-        logging.warning(f"[{ip}] Skipping scrape due to token failure.")
-        record_scrape_failure(ip, host_name)
+        fail_reason = token_error or "Unknown token error"
+        logging.warning(f"[{ip}] Skipping scrape due to token failure: {fail_reason}")
+        # 失敗状態を記録（fail_reasonを含める）
+        ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
+        record_scrape_failure(ip, host_name, fail_reason)
         return
 
     ap_query_url = f"https://{ip}:5825/management/v1/aps/query"
     headers = {
         'Authorization': f"Bearer {token}",
-        'Accept': 'application/json'  # curlコマンドと同じヘッダーを追加
+        'Accept': 'application/json'
     }
 
     logging.info(f"[{ip}] Querying AP data from: {ap_query_url}")
@@ -297,11 +321,37 @@ def collect_metrics_for_target(target):
 
         logging.info(f"[{ip}] Successfully processed {ap_count} APs")
 
-        # 3. APIスクレイプステータス (ap_scrape_up)
-        ap_scrape_up.labels(target_ip=ip, host_name=host_name).set(1)
+        # 3. APIスクレイプステータス (ap_scrape_up) - 成功時はfail_reasonを空に
+        ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason='').set(1)
         record_scrape_success(ip, host_name)
         logging.info(f"[{ip}] ===== Metric collection completed successfully =====")
 
+    except requests.exceptions.HTTPError as e:
+        fail_reason = f"HTTP {e.response.status_code}"
+        if e.response is not None:
+            try:
+                error_data = e.response.json()
+                api_error = error_data.get('errorMessage', error_data.get('message', ''))
+                if api_error:
+                    fail_reason = f"HTTP {e.response.status_code}: {api_error}"
+            except:
+                fail_reason = f"HTTP {e.response.status_code}: {e.response.text[:100]}"
+        logging.error(f"[{ip}] Failed to scrape AP data: {fail_reason}")
+        ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
+        record_scrape_failure(ip, host_name, fail_reason)
+        logging.info(f"[{ip}] ===== Metric collection failed =====")
+    except requests.exceptions.Timeout:
+        fail_reason = "Connection timeout"
+        logging.error(f"[{ip}] Failed to scrape AP data: {fail_reason}")
+        ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
+        record_scrape_failure(ip, host_name, fail_reason)
+        logging.info(f"[{ip}] ===== Metric collection failed =====")
+    except requests.exceptions.ConnectionError:
+        fail_reason = "Connection refused or network error"
+        logging.error(f"[{ip}] Failed to scrape AP data: {fail_reason}")
+        ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
+        record_scrape_failure(ip, host_name, fail_reason)
+        logging.info(f"[{ip}] ===== Metric collection failed =====")
     except requests.exceptions.RequestException as e:
         logging.error(f"[{ip}] Failed to scrape AP data: {type(e).__name__}: {e}")
         if hasattr(e, 'response') and e.response is not None:
@@ -310,10 +360,12 @@ def collect_metrics_for_target(target):
         record_scrape_failure(ip, host_name)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
     except Exception as e:
-        logging.error(f"[{ip}] Unexpected error during scraping: {type(e).__name__}: {e}")
+        fail_reason = f"Unexpected error: {type(e).__name__}: {str(e)[:100]}"
+        logging.error(f"[{ip}] {fail_reason}")
         import traceback
         logging.error(f"[{ip}] Traceback: {traceback.format_exc()}")
-        record_scrape_failure(ip, host_name)
+        ap_scrape_up.labels(target_ip=ip, host_name=host_name, fail_reason=fail_reason).set(0)
+        record_scrape_failure(ip, host_name, fail_reason)
         logging.info(f"[{ip}] ===== Metric collection failed =====")
 
 def load_targets_from_csv():

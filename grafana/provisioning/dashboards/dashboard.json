@@ -217,6 +217,34 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "host_name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Host Name"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fail_reason"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Fail Reason"
+              },
+              {
+                "id": "custom.width",
+                "value": 400
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "Time"
             },
             "properties": [
@@ -264,10 +292,14 @@
               "Value": true
             },
             "indexByName": {
-              "target_ip": 0
+              "target_ip": 0,
+              "host_name": 1,
+              "fail_reason": 2
             },
             "renameByName": {
-              "host_name": "Host Name"
+              "host_name": "Host Name",
+              "target_ip": "Controller IP",
+              "fail_reason": "Fail Reason"
             }
           }
         }
@@ -520,7 +552,7 @@
                       "from": 0,
                       "result": {
                         "color": "red",
-                        "text": "Down"
+                        "text": "Not InService"
                       },
                       "to": 0
                     },
@@ -818,7 +850,7 @@
                     "options": {
                       "0": {
                         "color": "red",
-                        "text": "Failed"
+                        "text": "Not InService"
                       }
                     },
                     "type": "value"
@@ -862,6 +894,22 @@
                 "value": 100
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fail_reason"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Fail Reason"
+              },
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
           }
         ]
       },
@@ -869,6 +917,29 @@
         {
           "id": "merge",
           "options": {}
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Value #A": {
+                "aggregations": ["last"],
+                "operation": "aggregate"
+              },
+              "target_ip": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "host_name": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "fail_reason": {
+                "aggregations": ["last"],
+                "operation": "aggregate"
+              }
+            }
+          }
         },
         {
           "id": "organize",
@@ -881,14 +952,16 @@
               "Value #B": true
             },
             "indexByName": {
-              "Value #A": 0,
+              "Value #A (last)": 0,
               "target_ip": 1,
-              "host_name": 2
+              "host_name": 2,
+              "fail_reason (last)": 3
             },
             "renameByName": {
-              "Value #A": "Status",
+              "Value #A (last)": "Status",
               "target_ip": "Controller IP",
-              "host_name": "Host Name"
+              "host_name": "Host Name",
+              "fail_reason (last)": "Fail Reason"
             }
           }
         }
