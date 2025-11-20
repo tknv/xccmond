@@ -1,8 +1,7 @@
 version: 2
 updates:
-  - package-ecosystem: pip
+  - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: weekly
+      interval: "weekly"
     open-pull-requests-limit: 5
-    security-updates: true
