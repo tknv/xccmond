@@ -217,6 +217,7 @@ __marimo__/
 
 # own memo
 memo.md
+.github/
 
 # test shell script
 test.sh
