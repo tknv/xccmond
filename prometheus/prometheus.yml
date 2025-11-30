@@ -1,6 +1,10 @@
 global:
-  scrape_interval: 5m # デフォルトのスクレイプ間隔を5分に設定
+  scrape_interval: 15m # デフォルトのスクレイプ間隔を5分に設定
   scrape_timeout: 120s # タイムアウトを2分に延長 (Exporterの処理が万一遅れても待つ)
+  evaluation_interval: 5m
+  # メモリ効率化
+  external_labels:
+    cluster: 'main'
 
 rule_files:
   - "/etc/prometheus/alert.rules.yml"
@@ -10,8 +14,16 @@ scrape_configs:
     # Prometheus自身のメトリクス
     static_configs:
       - targets: ['localhost:9090']
+    # Prometheus自身の不要なメトリクスを削除
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'go_.*|promhttp_metric_handler_.*|prometheus_rule_.*'
+        action: drop
 
   - job_name: 'extreme-ap-exporter'
-    # Exporterのコンテナ名 (docker-compose.ymlで定義)
+    scrape_interval: 15m  # 18000台 × 15分間隔
+    scrape_timeout: 30s
+    # limit sample
+    sample_limit: 100000  # 1回のscrapeで10万サンプルまで
     static_configs:
       - targets: ['exporter:9100']

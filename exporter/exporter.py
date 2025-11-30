@@ -20,7 +20,7 @@ logging.basicConfig(
 # Exporterがリッスンするポート
 EXPORTER_PORT = 9100
 # APIポーリング間隔 (秒)
-POLLING_INTERVAL = 300  # 5分
+POLLING_INTERVAL = 600  # 10分
 # CSVファイルパス
 CSV_FILE_PATH = 'targets.csv'
 # トークンの有効期限（マージンを持たせて 1時間50分）
@@ -28,15 +28,16 @@ TOKEN_LIFETIME_MINUTES = 110
 # APIリクエストのタイムアウト（秒）
 REQUEST_TIMEOUT = 10
 # 並列処理のワーカー数
-MAX_WORKERS = 50
+MAX_WORKERS = 30
 
 # --- Prometheus メトリクス定義 ---
 # ap_info: APの基本情報（主要なラベルのみ）
+# Remove sysUptime from labels to avoid high cardinality issues
 ap_info = Gauge(
     'ap_info',
     'Basic information about the Access Point',
     ['target_ip', 'host_name', 'hostname', 'serialNumber', 'ipAddress', 'hardwareType', 'status', 
-     'floorName', 'macAddress', 'softwareVersion', 'sysUptime', 'hostSite']
+     'floorName', 'macAddress', 'softwareVersion', 'hostSite']
 )
 # ap_status: APの稼働ステータス (1=InService, 0=Other)
 ap_status = Gauge(
@@ -338,7 +339,7 @@ def collect_metrics_for_target(target):
                     'macAddress': safe_get_value(ap, 'macAddress'),
                     'softwareVersion': safe_get_value(ap, 'softwareVersion'),
                     # sysUptimeは数値の可能性があるので、安全に文字列に変換
-                    'sysUptime': str(safe_get_value(ap, 'sysUptime', 0)),
+                    # 'sysUptime': str(safe_get_value(ap, 'sysUptime', 0)),
                     'hostSite': safe_get_value(ap, 'hostSite')              # API
                 }
 

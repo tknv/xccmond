@@ -15,6 +15,20 @@ services:
     # (exporter.py内で対応済みだが、念のため環境変数も設定)
     environment:
       - PYTHONWARNINGS="ignore:Unverified HTTPS request"
+    # Exporterにもメモリ制限
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9100/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # 2. Prometheus サービス
   prometheus:
@@ -31,7 +45,27 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle' # API経由でリロード可能にする
+      - '--web.enable-lifecycle'
+      # 18000台対応の最適化
+      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--storage.tsdb.min-block-duration=2h'
+      - '--storage.tsdb.max-block-chunk-segment-size=512MB'
+      - '--query.max-samples=100000000'
+      - '--query.timeout=5m'
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+          cpus: '4'
+        reservations:
+          memory: 8G
+          cpus: '2'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   flask-proxy:
     build: ./proxy
@@ -44,6 +78,11 @@ services:
       - PROXY_HEADER=X-WEBAUTH-USER
     depends_on:
       - grafana
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
 
   # 3. Grafana サービス
   grafana:
@@ -73,6 +112,13 @@ services:
       - GF_AUTH_PROXY_HEADER_NAME=X-WEBAUTH-USER
       - GF_AUTH_PROXY_AUTO_SIGN_UP=true
       - GF_NEWS_NEWS_FEED_ENABLED=false
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1'
+        reservations:
+          memory: 1G
 
 volumes:
   prometheus_data: {}
