@@ -1,5 +1,5 @@
 global:
-  scrape_interval: 15m # デフォルトのスクレイプ間隔を5分に設定
+  scrape_interval: 15m # デフォルトのスクレイプ間隔を15分に設定
   scrape_timeout: 120s # タイムアウトを2分に延長 (Exporterの処理が万一遅れても待つ)
   evaluation_interval: 5m
   # メモリ効率化
@@ -22,8 +22,8 @@ scrape_configs:
 
   - job_name: 'extreme-ap-exporter'
     scrape_interval: 15m  # 18000台 × 15分間隔
-    scrape_timeout: 30s
+    scrape_timeout: 120s
     # limit sample
-    sample_limit: 100000  # 1回のscrapeで10万サンプルまで
+    # sample_limit: 100000  # 1回のscrapeで10万サンプルまで
     static_configs:
       - targets: ['exporter:9100']

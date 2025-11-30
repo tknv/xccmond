@@ -46,7 +46,7 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle'
-      # 18000台対応の最適化
+      # for large scale deployments
       - '--storage.tsdb.retention.time=7d'
       - '--storage.tsdb.retention.size=10GB'
       - '--storage.tsdb.min-block-duration=2h'
